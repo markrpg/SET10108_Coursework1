@@ -24,24 +24,12 @@
     <ClInclude Include="targetver.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Coursework1_Sequential.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Coursework1_Parallel.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="SET10108_Coursework1.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Coursework1_Sequential.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Coursework1_Parallel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
