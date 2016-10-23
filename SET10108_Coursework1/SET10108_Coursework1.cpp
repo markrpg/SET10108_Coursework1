@@ -8,12 +8,15 @@
 #include <chrono>
 #include <array>
 #include <cstring>
+#include <fstream>
 
 using namespace std;
 using namespace std::chrono;
 
 constexpr char *secret = "A long time ago in a galaxy far, far away....";
 
+//Number of times to run a test
+constexpr unsigned int TEST_ITERATIONS = 100;
 constexpr unsigned int GENE_LENGTH = 8;
 constexpr unsigned int NUM_COPIES_ELITE = 4;
 constexpr unsigned int NUM_ELITE = 8;
@@ -186,26 +189,47 @@ string get_guess(const vector<unsigned int> &guess)
 
 int main()
 {
-	default_random_engine e(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
-	uniform_int_distribution<unsigned int> int_dist(0, 1);
-	vector<genome> genomes(POP_SIZE);
+	//Create file to store times in MS
+	ofstream data("benchmark.csv", ofstream::out);
 
-	for (unsigned int i = 0; i < POP_SIZE; ++i)
+	//Being Testing with 100 iterations
+	for (int i = 0; i < TEST_ITERATIONS; i++)
 	{
-		for (unsigned int j = 0; j < CHROMO_LENGTH; ++j)
-			genomes[i].bits.push_back(int_dist(e));
-	}
-	auto population = update_epoch(POP_SIZE, genomes);
-	for (unsigned int generation = 0; generation < 2048; ++generation)
-	{
+
+		//Start Recording time
+		auto start = system_clock::now();
+
+		default_random_engine e(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
+		uniform_int_distribution<unsigned int> int_dist(0, 1);
+		vector<genome> genomes(POP_SIZE);
+
 		for (unsigned int i = 0; i < POP_SIZE; ++i)
-			genomes[i].fitness = check_guess(population[i]);
-		population = update_epoch(POP_SIZE, genomes);
-		if (generation % 10 == 0)
 		{
-			cout << "Generation " << generation << ": " << get_guess(decode(best)) << endl;
-			cout << "Diff: " << check_guess(decode(best)) << endl;
+			for (unsigned int j = 0; j < CHROMO_LENGTH; ++j)
+				genomes[i].bits.push_back(int_dist(e));
 		}
+		auto population = update_epoch(POP_SIZE, genomes);
+
+		for (unsigned int generation = 0; generation < 2048; ++generation)
+		{
+			for (unsigned int i = 0; i < POP_SIZE; ++i)
+				genomes[i].fitness = check_guess(population[i]);
+			population = update_epoch(POP_SIZE, genomes);
+			if (generation % 10 == 0)
+			{
+				cout << "Generation " << generation << ": " << get_guess(decode(best)) << endl;
+				cout << "Diff: " << check_guess(decode(best)) << endl;
+			}
+		}
+
+		//Print time CSV file in ms
+		auto end = system_clock::now();
+		auto total = end - start;
+		data << duration_cast<milliseconds>(total).count() << endl;
 	}
+
+	//100 iterations complete. close file
+	data.close();
+	system("pause");
 	return 0;
 }
