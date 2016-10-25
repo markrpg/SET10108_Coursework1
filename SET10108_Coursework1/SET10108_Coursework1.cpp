@@ -9,6 +9,7 @@
 #include <array>
 #include <cstring>
 #include <fstream>
+#include <omp.h>
 
 using namespace std;
 using namespace std::chrono;
@@ -16,7 +17,7 @@ using namespace std::chrono;
 constexpr char *secret = "A long time ago in a galaxy far, far away....";
 
 //Number of times to run a test
-constexpr unsigned int TEST_ITERATIONS = 100;
+constexpr unsigned int TEST_ITERATIONS = 1;
 constexpr unsigned int GENE_LENGTH = 8;
 constexpr unsigned int NUM_COPIES_ELITE = 4;
 constexpr unsigned int NUM_ELITE = 8;
@@ -60,7 +61,7 @@ void grab_N_best(const unsigned int N, const unsigned int copies, vector<genome>
 
 const genome& roulette_wheel_selection(unsigned int pop_size, const unsigned int fitness, const vector<genome> &genomes)
 {
-	static default_random_engine e(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
+	default_random_engine e(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
 	static uniform_real_distribution<double> dist;
 	double slice = dist(e) * fitness;
 	unsigned int total = 0;
@@ -76,7 +77,7 @@ const genome& roulette_wheel_selection(unsigned int pop_size, const unsigned int
 
 void cross_over(double crossover_rate, unsigned int chromo_length, const genome &mum, const genome &dad, genome &baby1, genome &baby2)
 {
-	static default_random_engine e(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
+	default_random_engine e(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
 	static uniform_real_distribution<double> float_dist;
 	static uniform_int_distribution<unsigned int> int_dist(0, chromo_length);
 
@@ -98,7 +99,7 @@ void cross_over(double crossover_rate, unsigned int chromo_length, const genome 
 
 void mutate(double mutation_rate, genome &gen)
 {
-	static default_random_engine e(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
+	default_random_engine e(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
 	static uniform_real_distribution<double> dist;
 	double rnd;
 
@@ -117,7 +118,9 @@ vector<genome> epoch(unsigned int pop_size, vector<genome> &genomes)
 
 	if (((NUM_COPIES_ELITE * NUM_ELITE) % 2) == 0)
 		grab_N_best(NUM_ELITE, NUM_COPIES_ELITE, genomes, babies);
-	for (unsigned int i = NUM_ELITE * NUM_COPIES_ELITE; i < pop_size; i += 2)
+
+#pragma omp parallel for num_threads(4)
+	for (int i = NUM_ELITE * NUM_COPIES_ELITE; i < pop_size; i += 2)
 	{
 		auto mum = roulette_wheel_selection(pop_size, fitness, genomes);
 		auto dad = roulette_wheel_selection(pop_size, fitness, genomes);
@@ -203,16 +206,16 @@ int main()
 		uniform_int_distribution<unsigned int> int_dist(0, 1);
 		vector<genome> genomes(POP_SIZE);
 
-		for (unsigned int i = 0; i < POP_SIZE; ++i)
+		for (int i = 0; i < POP_SIZE; ++i)
 		{
 			for (unsigned int j = 0; j < CHROMO_LENGTH; ++j)
 				genomes[i].bits.push_back(int_dist(e));
 		}
 		auto population = update_epoch(POP_SIZE, genomes);
 
-		for (unsigned int generation = 0; generation < 2048; ++generation)
+		for (int generation = 0; generation < 2048; ++generation)
 		{
-			for (unsigned int i = 0; i < POP_SIZE; ++i)
+			for (int i = 0; i < POP_SIZE; ++i)
 				genomes[i].fitness = check_guess(population[i]);
 			population = update_epoch(POP_SIZE, genomes);
 			if (generation % 10 == 0)
