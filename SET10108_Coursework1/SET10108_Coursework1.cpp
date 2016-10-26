@@ -16,7 +16,7 @@ using namespace std::chrono;
 constexpr char *secret = "A long time ago in a galaxy far, far away....";
 
 //Number of times to run a test
-constexpr unsigned int TEST_ITERATIONS = 100;
+constexpr unsigned int TEST_ITERATIONS = 1;
 constexpr unsigned int GENE_LENGTH = 8;
 constexpr unsigned int NUM_COPIES_ELITE = 4;
 constexpr unsigned int NUM_ELITE = 8;
@@ -98,7 +98,7 @@ void cross_over(double crossover_rate, unsigned int chromo_length, const genome 
 
 void mutate(double mutation_rate, genome &gen)
 {
-	static default_random_engine e(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
+	default_random_engine e(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
 	static uniform_real_distribution<double> dist;
 	double rnd;
 
