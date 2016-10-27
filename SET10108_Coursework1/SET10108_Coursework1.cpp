@@ -10,6 +10,8 @@
 #include <cstring>
 #include <fstream>
 #include <omp.h>
+//Needed for usage of threading
+#include <thread>
 
 using namespace std;
 using namespace std::chrono;
@@ -26,6 +28,8 @@ constexpr unsigned int POP_SIZE = 512;
 const unsigned int NUM_CHARS = strlen(secret);
 const unsigned int CHROMO_LENGTH = NUM_CHARS * GENE_LENGTH;
 constexpr double MUTATION_RATE = 0.001;
+//Create global variable to hold number of available threads for the system
+int num_threads;
 
 struct genome
 {
@@ -66,7 +70,7 @@ const genome& roulette_wheel_selection(unsigned int pop_size, const unsigned int
 	double slice = dist(e) * fitness;
 	unsigned int total = 0;
 
-	for (unsigned int i = 0; i < pop_size; ++i)
+	for (int i = 0; i < pop_size; ++i)
 	{
 		total += genomes[i].fitness;
 		if (total > slice)
@@ -99,7 +103,7 @@ void cross_over(double crossover_rate, unsigned int chromo_length, const genome 
 
 void mutate(double mutation_rate, genome &gen)
 {
-	default_random_engine e(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
+    default_random_engine e(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
 	static uniform_real_distribution<double> dist;
 	double rnd;
 
@@ -119,7 +123,8 @@ vector<genome> epoch(unsigned int pop_size, vector<genome> &genomes)
 	if (((NUM_COPIES_ELITE * NUM_ELITE) % 2) == 0)
 		grab_N_best(NUM_ELITE, NUM_COPIES_ELITE, genomes, babies);
 
-#pragma omp parallel for num_threads(4)
+//Pre-Processor statement that initializes OpenMP's parallel for implementation
+#pragma omp parallel for num_threads(num_threads)
 	for (int i = NUM_ELITE * NUM_COPIES_ELITE; i < pop_size; i += 2)
 	{
 		auto mum = roulette_wheel_selection(pop_size, fitness, genomes);
@@ -141,6 +146,7 @@ vector<unsigned int> decode(genome &gen)
 	static vector<unsigned int> this_gene(gen.gene_length);
 	vector<unsigned int> decoded(NUM_CHARS);
 
+
 	for (unsigned int gene = 0, count = 0; gene < gen.bits.size(); gene += gen.gene_length, ++count)
 	{
 		for (unsigned int bit = 0; bit < gen.gene_length; ++bit)
@@ -148,7 +154,8 @@ vector<unsigned int> decode(genome &gen)
 
 		unsigned int val = 0;
 		unsigned int multiplier = 1;
-		for (unsigned int c_bit = this_gene.size(); c_bit > 0; --c_bit)
+
+		for (int c_bit = this_gene.size(); c_bit > 0; --c_bit)
 		{
 			val += this_gene[c_bit - 1] * multiplier;
 			multiplier *= 2;
@@ -161,9 +168,9 @@ vector<unsigned int> decode(genome &gen)
 vector<vector<unsigned int>> update_epoch(unsigned int pop_size, vector<genome> &genomes)
 {
 	vector<vector<unsigned int>> guesses;
-
 	genomes = epoch(pop_size, genomes);
-	for (unsigned int i = 0; i < genomes.size(); ++i)
+
+	for (int i = 0; i < genomes.size(); ++i)
 		guesses.push_back(decode(genomes[i]));
 	return guesses;
 }
@@ -171,6 +178,7 @@ vector<vector<unsigned int>> update_epoch(unsigned int pop_size, vector<genome> 
 unsigned int check_guess(const vector<unsigned int> &guess)
 {
 	vector<unsigned char> v(guess.size());
+
 	for (unsigned int i = 0; i < guess.size(); ++i)
 		v[i] = static_cast<unsigned char>(guess[i]);
 	string s(v.begin(), v.end());
@@ -184,7 +192,9 @@ unsigned int check_guess(const vector<unsigned int> &guess)
 string get_guess(const vector<unsigned int> &guess)
 {
 	vector<unsigned char> v(guess.size());
-	for (unsigned int i = 0; i < guess.size(); ++i)
+	int i; 
+
+	for (i = 0; i < guess.size(); ++i)
 		v[i] = static_cast<unsigned char>(guess[i]);
 	string s(v.begin(), v.end());
 	return s;
@@ -192,6 +202,9 @@ string get_guess(const vector<unsigned int> &guess)
 
 int main()
 {
+	//define number of available threads for parallisation
+	num_threads = thread::hardware_concurrency();
+
 	//Create file to store times in MS
 	ofstream data("benchmark.csv", ofstream::out);
 
@@ -215,7 +228,7 @@ int main()
 
 		for (int generation = 0; generation < 2048; ++generation)
 		{
-			for (int i = 0; i < POP_SIZE; ++i)
+			for (int i = 0; i < POP_SIZE; ++i) 
 				genomes[i].fitness = check_guess(population[i]);
 			population = update_epoch(POP_SIZE, genomes);
 			if (generation % 10 == 0)
@@ -228,6 +241,7 @@ int main()
 		//Print time CSV file in ms
 		auto end = system_clock::now();
 		auto total = end - start;
+		cout << endl << duration_cast<milliseconds>(total).count() << endl;;
 		data << duration_cast<milliseconds>(total).count() << endl;
 	}
 
