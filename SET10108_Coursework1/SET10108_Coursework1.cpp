@@ -35,7 +35,7 @@ struct genome
 {
 	vector<unsigned int> bits;
 	unsigned int fitness = 0.0;
-	unsigned int gene_length = GENE_LENGTH;
+	float gene_length = GENE_LENGTH;
 };
 
 genome best;
@@ -44,9 +44,36 @@ unsigned int calculate_total_fitness(const vector<genome> &genomes)
 {
 	unsigned int total_fitness = 0;
 
+	//Holds temporary float of last value
+	float result[4]{ 0,0,0,0 };
+
+//Pre-Processor statement that initializes OpenMP's parallel for implementation
+#pragma omp parallel for schedule(dynamic)
+//SIMD version of calculate_total_fitness
+	for (int i = 0; i < genomes.size(); i+=4)
+	{
+		//Generate temporary float to hold 4 values
+		float temp[4]{ genomes[i].gene_length,genomes[i+1].gene_length,
+			genomes[i+2].gene_length,genomes[i+3].gene_length};
+
+		//Load float 
+		__m128 value = _mm_loadu_ps(temp);
+		//Load last value
+		__m128 lastvalue = _mm_loadu_ps(&result[0]);
+		//Add both values together 
+		__m128 add = _mm_add_ps(lastvalue, value);
+		//Store added value to local float
+		_mm_storeu_ps(&result[0], add);
+	}
+
+	/*Original solution
 	for (auto &genome : genomes)
 		total_fitness += genome.gene_length;
 	return total_fitness;
+	*/
+
+	//Sum up total fitness and return
+	return result[0] + result[1] + result[2] + result[3];
 }
 
 inline bool comp_by_fitness(const genome &a, const genome &b)
@@ -70,9 +97,28 @@ const genome& roulette_wheel_selection(unsigned int pop_size, const unsigned int
 	double slice = dist(e) * fitness;
 	unsigned int total = 0;
 
-	for (int i = 0; i < pop_size; ++i)
+	//Holds temporary float of last value
+	float result[4]{ 0,0,0,0 };
+
+	//Pre-Processor statement that initializes OpenMP's parallel for implementation
+//#pragma omp parallel for
+	for (int i = 0; i < pop_size; i+=4)
 	{
-		total += genomes[i].fitness;
+		//Temporary float to hold iterations of 4 
+		float temp[4]{ genomes[i].fitness,genomes[i + 1].fitness,genomes[i + 2].fitness,
+			genomes[i + 3].fitness };
+
+		//Load float array
+		__m128 value = _mm_loadu_ps(temp);
+		//load last value
+		__m128 lastvalue = _mm_loadu_ps(&result[0]);
+		//carry out addition on two values
+		__m128 add = _mm_add_ps(lastvalue, value);
+		//Store the result in result float array
+		_mm_storeu_ps(&result[0], add);
+		//Set total to sum of result float array
+		total = result[0] + result[1] + result[2] + result[3];
+
 		if (total > slice)
 			return genomes[i];
 	}
@@ -124,7 +170,7 @@ vector<genome> epoch(unsigned int pop_size, vector<genome> &genomes)
 		grab_N_best(NUM_ELITE, NUM_COPIES_ELITE, genomes, babies);
 
 //Pre-Processor statement that initializes OpenMP's parallel for implementation
-#pragma omp parallel for num_threads(num_threads)
+#pragma omp parallel for num_threads(num_threads) schedule(dynamic)
 	for (int i = NUM_ELITE * NUM_COPIES_ELITE; i < pop_size; i += 2)
 	{
 		auto mum = roulette_wheel_selection(pop_size, fitness, genomes);
@@ -143,26 +189,45 @@ vector<genome> epoch(unsigned int pop_size, vector<genome> &genomes)
 
 vector<unsigned int> decode(genome &gen)
 {
-	static vector<unsigned int> this_gene(gen.gene_length);
 	vector<unsigned int> decoded(NUM_CHARS);
 
-
-	for (unsigned int gene = 0, count = 0; gene < gen.bits.size(); gene += gen.gene_length, ++count)
+	for (int gene = 0; gene < gen.bits.size(); gene += gen.gene_length)
 	{
-		for (unsigned int bit = 0; bit < gen.gene_length; ++bit)
-			this_gene[bit] = gen.bits[gene + bit];
+		//Calculate count
+		int count = gene / gen.gene_length;
 
-		unsigned int val = 0;
-		unsigned int multiplier = 1;
+		//Local float to hold SIMD Value
+		float val[4] = { 0,0,0,0 };
+		float multiplier = 1;
 
-		for (int c_bit = this_gene.size(); c_bit > 0; --c_bit)
+		for (int c_bit = gen.gene_length; c_bit > 0; c_bit-=4)
 		{
-			val += this_gene[c_bit - 1] * multiplier;
-			multiplier *= 2;
+			//Calculate 4 iterations of multiplier
+			float multi[4]{ multiplier,multiplier * 2,multiplier * 4,multiplier * 8 };
+			//Get 4 iterations of gen and store in float array
+			float temp[4]{ gen.bits[gene + c_bit],
+				gen.bits[(gene + c_bit) - 1],
+				gen.bits[(gene + c_bit) - 2],
+				gen.bits[(gene + c_bit) - 3]};
+			
+			//Calculate addition then multiplication for val
+			__m128 result = _mm_add_ps(_mm_loadu_ps(&val[0]) ,
+				_mm_mul_ps(_mm_loadu_ps(&temp[0]), _mm_loadu_ps(&multi[0])));
+
+			//Store result in float array
+			_mm_storeu_ps(&val[0], result);
+
+			//Update multiplier for next 4 iterations
+			multiplier *= 16;
 		}
-		decoded[count] = val;
+
+		//Sum all of float array to get value for return
+		decoded[count] = val[0] + val[1] + val[2] + val[3];
 	}
 	return decoded;
+
+
+
 }
 
 vector<vector<unsigned int>> update_epoch(unsigned int pop_size, vector<genome> &genomes)
@@ -184,7 +249,7 @@ unsigned int check_guess(const vector<unsigned int> &guess)
 	string s(v.begin(), v.end());
 	unsigned int diff = 0;
 
-	for (unsigned int i = 0; i < s.length(); ++i)
+	for (int i = 0; i < s.length(); ++i)
 		diff += abs(s[i] - secret[i]);
 	return diff;
 }
@@ -194,6 +259,7 @@ string get_guess(const vector<unsigned int> &guess)
 	vector<unsigned char> v(guess.size());
 	int i; 
 
+#pragma omp parallel for schedule(dynamic)
 	for (i = 0; i < guess.size(); ++i)
 		v[i] = static_cast<unsigned char>(guess[i]);
 	string s(v.begin(), v.end());
